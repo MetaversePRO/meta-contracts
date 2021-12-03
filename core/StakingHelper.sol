@@ -5,7 +5,7 @@ import "./libs/IERC20.sol";
 import "./libs/interface/IStaking.sol";
 
 //modified from OlympusDao
-//author : _bing
+//author : _bing @ MetaversePRO
 
 contract StakingHelper {
 

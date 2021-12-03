@@ -4,7 +4,7 @@ pragma solidity 0.7.5;
 import "./libs/TWAPOracleUpdater.sol";
 
 //modified from OlympusDao
-//author : _bing
+//author : _bing @ MetaversePRO
 
 contract MetaERC20Token is TWAPOracleUpdater {
 

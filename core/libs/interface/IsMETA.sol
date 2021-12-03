@@ -16,4 +16,8 @@ interface IsMETA {
     function balanceForGons( uint gons ) external view returns ( uint );
     
     function index() external view returns ( uint );
+	
+    function INDEX() external view returns ( uint );
+	
+    function totalSupply() external view returns ( uint );
 }

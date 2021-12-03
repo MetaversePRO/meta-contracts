@@ -10,7 +10,7 @@ import "./libs/interface/IBondCalculator.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
 //modified from OlympusDao
-//author : _bing
+//author : _bing @ MetaversePRO
 
 contract MetaTreasury is DaoOwnable {
 
