@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.7.5;
 
-import "./libs/Policy.sol";
 import "./libs/IERC20.sol";
 import "./libs/SafeERC20.sol";
 import "./libs/FixedPoint.sol";
@@ -10,12 +9,14 @@ import "./libs/interface/ITreasury.sol";
 import "./libs/interface/IBondCalculator.sol";
 import "./libs/interface/IStaking.sol";
 import "./libs/interface/IStakingHelper.sol";
+import "./libs/interface/AggregatorV3Interface.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
+// for bond using link oracle price
 //modified from OlympusDao
 //author : _bing @ MetaversePRO
 
-contract MetaBondDepository is DaoOwnable {
+contract MetaBondDepositoryV2 is DaoOwnable {
 
     using FixedPoint for *;
     using SafeERC20 for IERC20;
@@ -35,8 +36,7 @@ contract MetaBondDepository is DaoOwnable {
     address public immutable treasury; // mints META when receives principle
     address public immutable DAO; // receives profit share from bond
 
-    bool public immutable isLiquidityBond; // LP and Reserve bonds are treated slightly different
-    address public immutable bondCalculator; // calculates value of LP tokens
+    AggregatorV3Interface internal priceFeed;
 
     address public staking; // to auto-stake payout
     address public stakingHelper; // to stake and claim if no staking warmup
@@ -58,7 +58,6 @@ contract MetaBondDepository is DaoOwnable {
         uint vestingTerm; // in blocks
         uint minimumPrice; // vs principle value
         uint maxPayout; // in thousandths of a %. i.e. 500 = 0.5%
-        uint fee; // as % of bond payout, in hundreths. ( 500 = 5% = 0.05 for every 1 paid)
         uint maxDebt; // 9 decimal debt ratio, max % total supply created as debt
     }
 
@@ -67,7 +66,7 @@ contract MetaBondDepository is DaoOwnable {
         uint payout; // META remaining to be paid
         uint vesting; // Blocks left to vest
         uint lastBlock; // Last interaction
-        uint pricePaid; // In DAI, for front end viewing
+        uint pricePaid; // In BUSD, for front end viewing
     }
 
     // Info for incremental adjustments to control variable 
@@ -86,7 +85,7 @@ contract MetaBondDepository is DaoOwnable {
         address _principle,
         address _treasury, 
         address _DAO, 
-        address _bondCalculator
+        address _feed
     ) {
         require( _META != address(0) );
         META = _META;
@@ -96,9 +95,8 @@ contract MetaBondDepository is DaoOwnable {
         treasury = _treasury;
         require( _DAO != address(0) );
         DAO = _DAO;
-        // bondCalculator should be address(0) if not LP bond
-        bondCalculator = _bondCalculator;
-        isLiquidityBond = ( _bondCalculator != address(0) );
+		require( _feed != address(0) );
+        priceFeed = AggregatorV3Interface( _feed );
     }
 
     /**
@@ -107,7 +105,6 @@ contract MetaBondDepository is DaoOwnable {
      *  @param _vestingTerm uint
      *  @param _minimumPrice uint
      *  @param _maxPayout uint
-     *  @param _fee uint
      *  @param _maxDebt uint
      *  @param _initialDebt uint
      */
@@ -116,7 +113,6 @@ contract MetaBondDepository is DaoOwnable {
         uint _vestingTerm,
         uint _minimumPrice,
         uint _maxPayout,
-        uint _fee,
         uint _maxDebt,
         uint _initialDebt
     ) external onlyManager() {
@@ -126,7 +122,6 @@ contract MetaBondDepository is DaoOwnable {
             vestingTerm: _vestingTerm,
             minimumPrice: _minimumPrice,
             maxPayout: _maxPayout,
-            fee: _fee,
             maxDebt: _maxDebt
         });
         totalDebt = _initialDebt;
@@ -135,7 +130,7 @@ contract MetaBondDepository is DaoOwnable {
     
     /* ======== POLICY FUNCTIONS ======== */
 
-    enum PARAMETER { VESTING, PAYOUT, FEE, DEBT }
+    enum PARAMETER { VESTING, PAYOUT, DEBT }
     /**
      *  @notice set parameters for new bonds
      *  @param _parameter PARAMETER
@@ -148,10 +143,7 @@ contract MetaBondDepository is DaoOwnable {
         } else if ( _parameter == PARAMETER.PAYOUT ) { // 1
             require( _input <= 1000, "Payout cannot be above 1 percent" );
             terms.maxPayout = _input;
-        } else if ( _parameter == PARAMETER.FEE ) { // 2
-            require( _input <= 10000, "DAO fee cannot exceed payout" );
-            terms.fee = _input;
-        } else if ( _parameter == PARAMETER.DEBT ) { // 3
+        } else if ( _parameter == PARAMETER.DEBT ) { // 2
             terms.maxDebt = _input;
         }
     }
@@ -169,7 +161,7 @@ contract MetaBondDepository is DaoOwnable {
         uint _target,
         uint _buffer 
     ) external onlyManager() {
-        require( _increment <= terms.controlVariable.mul( 25 ).div( 1000 ), "Increment too large" );
+        //require( _increment <= terms.controlVariable.mul( 25 ).div( 1000 ), "Increment too large" );
 
         adjustment = Adjust({
             add: _addition,
@@ -226,22 +218,12 @@ contract MetaBondDepository is DaoOwnable {
         require( payout >= 10000000, "Bond too small" ); // must be > 0.01 META ( underflow protection )
         require( payout <= maxPayout(), "Bond too large"); // size protection because there is no slippage
 
-        // profits are calculated
-        uint fee = payout.mul( terms.fee ).div( 10000 );
-        uint profit = value.sub( payout ).sub( fee );
-
         /**
-            principle is transferred in
-            approved and
-            deposited into the treasury, returning (_amount - profit) META
+            asset carries risk and is not minted against
+            asset transfered to treasury and rewards minted as payout
          */
-        IERC20( principle ).safeTransferFrom( msg.sender, address(this), _amount );
-        IERC20( principle ).approve( address( treasury ), _amount );
-        ITreasury( treasury ).deposit( _amount, principle, profit );
-        
-        if ( fee != 0 ) { // fee is transferred to dao 
-            IERC20( META ).safeTransfer( DAO, fee ); 
-        }
+        IERC20( principle ).safeTransferFrom( msg.sender, treasury, _amount );
+        ITreasury( treasury ).mintRewards( address(this), payout );
         
         // total debt is increased
         totalDebt = totalDebt.add( value ); 
@@ -364,7 +346,7 @@ contract MetaBondDepository is DaoOwnable {
      *  @return uint
      */
     function payoutFor( uint _value ) public view returns ( uint ) {
-        return FixedPoint.fraction( _value, bondPrice() ).decode112with18().div( 1e16 );
+        return FixedPoint.fraction( _value, bondPrice() ).decode112with18().div( 1e14 );
     }
 
 
@@ -373,18 +355,18 @@ contract MetaBondDepository is DaoOwnable {
      *  @return price_ uint
      */
     function bondPrice() public view returns ( uint price_ ) {        
-        price_ = terms.controlVariable.mul( debtRatio() ).add( 1000000000 ).div( 1e7 );
+        price_ = terms.controlVariable.mul( debtRatio() ).div( 1e5 );
         if ( price_ < terms.minimumPrice ) {
             price_ = terms.minimumPrice;
         }
     }
-
-    /**
+	
+	/**
      *  @notice calculate current bond price and remove floor if above
      *  @return price_ uint
      */
     function _bondPrice() internal returns ( uint price_ ) {
-        price_ = terms.controlVariable.mul( debtRatio() ).add( 1000000000 ).div( 1e7 );
+        price_ = terms.controlVariable.mul( debtRatio() ).div( 1e5 );
         if ( price_ < terms.minimumPrice ) {
             price_ = terms.minimumPrice;        
         } else if ( terms.minimumPrice != 0 ) {
@@ -393,17 +375,20 @@ contract MetaBondDepository is DaoOwnable {
     }
 
     /**
-     *  @notice converts bond price to DAI value
+     *  @notice get asset price from chainlink
+     */
+    function assetPrice() public view returns (int) {
+        ( , int price, , , ) = priceFeed.latestRoundData();
+        return price;
+    }
+
+    /**
+     *  @notice converts bond price to BUSD value
      *  @return price_ uint
      */
     function bondPriceInUSD() public view returns ( uint price_ ) {
-        if( isLiquidityBond ) {
-            price_ = bondPrice().mul( IBondCalculator( bondCalculator ).markdown( principle ) ).div( 100 );
-        } else {
-            price_ = bondPrice().mul( 10 ** IERC20( principle ).decimals() ).div( 100 );
-        }
+        price_ = bondPrice().mul( uint( assetPrice() ) ).mul( 1e6 );
     }
-
 
     /**
      *  @notice calculate current ratio of debt to META supply
@@ -418,15 +403,11 @@ contract MetaBondDepository is DaoOwnable {
     }
 
     /**
-     *  @notice debt ratio in same terms for reserve or liquidity bonds
+     *  @notice debt ratio in same terms as reserve bonds
      *  @return uint
      */
     function standardizedDebtRatio() external view returns ( uint ) {
-        if ( isLiquidityBond ) {
-            return debtRatio().mul( IBondCalculator( bondCalculator ).markdown( principle ) ).div( 1e9 );
-        } else {
-            return debtRatio();
-        }
+        return debtRatio().mul( uint( assetPrice() ) ).div( 1e8 ); // BNB feed is 8 decimals
     }
 
     /**

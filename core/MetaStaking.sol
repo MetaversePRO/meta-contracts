@@ -10,7 +10,7 @@ import "./libs/interface/IWarmup.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
 //modified from OlympusDao
-//author : _bing
+//author : _bing @ MetaversePRO
 
 contract MetaStaking is DaoOwnable {
 

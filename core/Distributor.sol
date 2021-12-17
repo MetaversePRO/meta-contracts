@@ -8,7 +8,7 @@ import "./libs/interface/ITreasury.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
 //modified from OlympusDao
-//author : _bing
+//author : _bing @ MetaversePRO
 
 contract Distributor is Policy {
     using SafeMath for uint;

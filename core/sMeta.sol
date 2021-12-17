@@ -5,7 +5,7 @@ import "./libs/ERC20Permit.sol";
 import "./libs/DaoOwnable.sol";
 
 //modified from OlympusDao
-//author : _bing
+//author : _bing @ MetaversePRO
 
 contract sMeta is ERC20Permit, DaoOwnable {
 
