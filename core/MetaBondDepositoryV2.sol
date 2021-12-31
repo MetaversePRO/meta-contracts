@@ -205,7 +205,6 @@ contract MetaBondDepositoryV2 is DaoOwnable {
         require( _depositor != address(0), "Invalid address" );
 
         decayDebt();
-        require( totalDebt <= terms.maxDebt, "Max capacity reached" );
         
         uint priceInUSD = bondPriceInUSD(); // Stored in bond info
         uint nativePrice = _bondPrice();
@@ -227,6 +226,7 @@ contract MetaBondDepositoryV2 is DaoOwnable {
         
         // total debt is increased
         totalDebt = totalDebt.add( value ); 
+        require( totalDebt <= terms.maxDebt, "Max capacity reached" );
                 
         // depositor info is stored
         bondInfo[ _depositor ] = Bond({ 
