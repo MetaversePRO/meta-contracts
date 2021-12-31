@@ -138,7 +138,7 @@ contract MetaBondDepositoryV2 is DaoOwnable {
      */
     function setBondTerms ( PARAMETER _parameter, uint _input ) external onlyManager() {
         if ( _parameter == PARAMETER.VESTING ) { // 0
-            require( _input >= 10000, "Vesting must be longer than 36 hours" );
+            require( _input >= 43200, "Vesting must be longer than 36 hours" ); //60*60*36/2 = 43200
             terms.vestingTerm = _input;
         } else if ( _parameter == PARAMETER.PAYOUT ) { // 1
             require( _input <= 1000, "Payout cannot be above 1 percent" );
