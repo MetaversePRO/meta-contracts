@@ -458,7 +458,7 @@ contract MetaTreasury is DaoOwnable {
         @param _token address
         @return bool
      */
-    function listContains( address[] storage _list, address _token ) internal view returns ( bool ) {
+    function listContains( address[] calldata _list, address _token ) internal view returns ( bool ) {
         for( uint i = 0; i < _list.length; i++ ) {
             if( _list[ i ] == _token ) {
                 return true;
