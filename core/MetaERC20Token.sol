@@ -52,7 +52,7 @@ contract MetaERC20Token is TWAPOracleUpdater {
         _burnFrom(account_, amount_);
     }
 
-    function _burnFrom(address account_, uint256 amount_) public virtual {
+    function _burnFrom(address account_, uint256 amount_) internal virtual {
         uint256 decreasedAllowance_ =
             allowance(account_, msg.sender).sub(
                 amount_,
